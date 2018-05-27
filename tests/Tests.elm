@@ -31,4 +31,13 @@ all =
                             ]
                         )
             ]
+        , describe "boost"
+            [ test "on a term" <|
+                \() ->
+                    testQuery "{\"term\":{\"a_field\":{\"value\":\"a value\",\"boost\":1.2}}}"
+                        (ES.string "a value"
+                            |> ES.term "a_field"
+                            |> ES.boost 1.2
+                        )
+            ]
         ]

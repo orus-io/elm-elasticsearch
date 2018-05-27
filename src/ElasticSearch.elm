@@ -28,6 +28,8 @@ module ElasticSearch
         , mustNot
         , should
         , filter
+          -- params
+        , boost
           -- encode
         , encode
         )
@@ -60,6 +62,11 @@ These operators are to be used with the range query
 ## Compound queries
 
 @docs bool, must, mustNot, should, filter
+
+
+## Common params
+
+@docs boost
 
 
 # Encode
@@ -558,3 +565,24 @@ should minShouldMatch list =
 filter : List Query -> BoolClause
 filter =
     Filter
+
+
+{-| Set the query boost
+
+For some queries, like `term`, it is a no-op
+
+-}
+boost : Float -> Query -> Query
+boost b q =
+    case q of
+        Term q ->
+            Term { q | boost = Just b }
+
+        Range q ->
+            Range { q | boost = Just b }
+
+        Type q ->
+            Type q
+
+        Bool q ->
+            Bool { q | boost = Just b }
