@@ -1,6 +1,8 @@
 module ElasticSearch
     exposing
         ( Query
+        , SearchRequest
+        , searchRequest
           -- value types
         , Value
         , date
@@ -30,13 +32,18 @@ module ElasticSearch
         , filter
           -- params
         , boost
+          -- sort
+        , asc
+        , desc
+        , sortBy
           -- encode
-        , encode
+        , encodeQuery
+        , encodeSearchRequest
         )
 
 {-| Easily generate typesafe elasticsearch queries
 
-@docs Query
+@docs Query, SearchRequest, searchRequest
 
 
 # Value types
@@ -69,9 +76,14 @@ These operators are to be used with the range query
 @docs boost
 
 
+# Sort
+
+@docs sortBy, asc, desc
+
+
 # Encode
 
-@docs encode
+@docs encodeQuery, encodeSearchRequest
 
 -}
 
@@ -428,8 +440,8 @@ type Query
 
 {-| Encode a query to a Json.Encode.Value
 -}
-encode : Query -> JE.Value
-encode q =
+encodeQuery : Query -> JE.Value
+encodeQuery q =
     case q of
         Term q ->
             encodeTermQuery q
@@ -451,11 +463,11 @@ encodeQueryList qlist =
             Nothing
 
         [ single ] ->
-            Just <| encode single
+            Just <| encodeQuery single
 
         qlist ->
             qlist
-                |> List.map encode
+                |> List.map encodeQuery
                 |> JE.list
                 |> Just
 
@@ -586,3 +598,165 @@ boost b q =
 
         Bool q ->
             Bool { q | boost = Just b }
+
+
+type SortOrder
+    = Asc
+    | Desc
+
+
+sortOrderToString : SortOrder -> String
+sortOrderToString order =
+    case order of
+        Asc ->
+            "asc"
+
+        Desc ->
+            "desc"
+
+
+encodeSortOrder : SortOrder -> JE.Value
+encodeSortOrder =
+    sortOrderToString
+        >> JE.string
+
+
+{-| Sort in ascending order
+-}
+asc : SortOrder
+asc =
+    Asc
+
+
+{-| Sort in descending order
+-}
+desc : SortOrder
+desc =
+    Desc
+
+
+type SortMode
+    = SortModeMin
+    | SortModeMax
+    | SortModeSum
+    | SortModeAvg
+    | SortModeMedian
+
+
+sortModeToString : SortMode -> String
+sortModeToString mode =
+    case mode of
+        SortModeMin ->
+            "min"
+
+        SortModeMax ->
+            "max"
+
+        SortModeSum ->
+            "sum"
+
+        SortModeAvg ->
+            "avg"
+
+        SortModeMedian ->
+            "median"
+
+
+encodeSortMode : SortMode -> JE.Value
+encodeSortMode =
+    sortModeToString
+        >> JE.string
+
+
+sortModeMin : SortMode
+sortModeMin =
+    SortModeMin
+
+
+sortModeMax : SortMode
+sortModeMax =
+    SortModeMax
+
+
+sortModeSum : SortMode
+sortModeSum =
+    SortModeSum
+
+
+sortModeAvg : SortMode
+sortModeAvg =
+    SortModeAvg
+
+
+sortModeMedian : SortMode
+sortModeMedian =
+    SortModeMedian
+
+
+type Sort
+    = SortByField String SortOrder
+    | SortByArrayField String SortOrder SortMode
+
+
+encodeSort : Sort -> JE.Value
+encodeSort sort =
+    case sort of
+        SortByField name order ->
+            JE.object
+                [ ( name, encodeSortOrder order )
+                ]
+
+        SortByArrayField name order mode ->
+            JE.object
+                [ ( name
+                  , JE.object
+                        [ ( "order", encodeSortOrder order )
+                        , ( "mode", encodeSortMode mode )
+                        ]
+                  )
+                ]
+
+
+{-| Sort on a field
+-}
+sortBy : String -> SortOrder -> Sort
+sortBy =
+    SortByField
+
+
+sortByArray : String -> SortOrder -> SortMode -> Sort
+sortByArray =
+    SortByArrayField
+
+
+{-| A search request
+-}
+type alias SearchRequest =
+    { query : Query
+    , sort : List Sort
+    }
+
+
+{-| search Request
+-}
+searchRequest : List Sort -> Query -> SearchRequest
+searchRequest sort query =
+    SearchRequest query sort
+
+
+{-| encode a SearchRequest
+-}
+encodeSearchRequest : SearchRequest -> JE.Value
+encodeSearchRequest request =
+    JE.object <|
+        [ ( "query", encodeQuery request.query ) ]
+            ++ case request.sort of
+                [] ->
+                    []
+
+                list ->
+                    [ ( "sort"
+                      , List.map encodeSort list
+                            |> JE.list
+                      )
+                    ]
