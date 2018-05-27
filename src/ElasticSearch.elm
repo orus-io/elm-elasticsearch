@@ -23,11 +23,11 @@ module ElasticSearch
         , term
         , type_
           -- compound queries
+        , bool
         , must
         , mustNot
         , should
         , filter
-        , andMust
           -- encode
         , encode
         )
@@ -59,7 +59,7 @@ These operators are to be used with the range query
 
 ## Compound queries
 
-@docs must, mustNot, should, filter, andMust
+@docs bool, must, mustNot, should, filter
 
 
 # Encode
@@ -493,41 +493,68 @@ maybeCombine a b =
             b
 
 
-{-| A `bool` query with a `must` clause
+type BoolClause
+    = Must (List Query)
+    | Filter (List Query)
+    | Should (List Query) (Maybe Int)
+    | MustNot (List Query)
+
+
+{-| A `bool` query
 -}
-must : List Query -> Query
-must qlist =
-    Bool { emptyBoolQuery | must = qlist }
+bool : List BoolClause -> Query
+bool =
+    List.foldl
+        (\clause q ->
+            case clause of
+                Must list ->
+                    { q
+                        | must = q.must ++ list
+                    }
+
+                Filter list ->
+                    { q
+                        | filter = q.filter ++ list
+                    }
+
+                Should list minShouldMatch ->
+                    { q
+                        | should = q.should ++ list
+                        , minimumShouldMatch = minShouldMatch
+                    }
+
+                MustNot list ->
+                    { q
+                        | mustNot = q.mustNot ++ list
+                    }
+        )
+        emptyBoolQuery
+        >> Bool
 
 
-{-| A `bool` query with a `must_not` clause
+{-| A `must` clause for the `bool` constructor
 -}
-mustNot : List Query -> Query
-mustNot qlist =
-    Bool { emptyBoolQuery | mustNot = qlist }
+must : List Query -> BoolClause
+must =
+    Must
 
 
-{-| A `bool` query with a `should` clause
+{-| A `mustNot` clause for the `bool` constructor
 -}
-should : List Query -> Query
-should qlist =
-    Bool { emptyBoolQuery | should = qlist }
+mustNot : List Query -> BoolClause
+mustNot =
+    MustNot
 
 
-{-| A `bool` query with a `filter` clause
+{-| A `should` clause for the `bool` constructor
 -}
-filter : List Query -> Query
-filter qlist =
-    Bool { emptyBoolQuery | filter = qlist }
+should : Maybe Int -> List Query -> BoolClause
+should minShouldMatch list =
+    Should list minShouldMatch
 
 
-{-| Add a `must` clause to a query
+{-| A `filter` clause for the `bool` constructor
 -}
-andMust : Query -> Query -> Query
-andMust q intoQ =
-    case intoQ of
-        Bool bq ->
-            Bool { bq | must = q :: bq.must }
-
-        intoQ ->
-            must [ q, intoQ ]
+filter : List Query -> BoolClause
+filter =
+    Filter
